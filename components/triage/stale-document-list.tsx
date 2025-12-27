@@ -13,25 +13,31 @@ import {
   FileText,
   Rss,
   AlertCircle,
-  Shuffle,
-  RefreshCw
+  RefreshCw,
+  Shuffle
 } from "lucide-react";
-import { StaleDocumentGroup, StaleDocument, archiveDocuments, getStaleDocuments } from "@/app/actions/triage";
+import { StaleDocumentGroup, StaleDocument, archiveDocuments, getStaleDocuments, getStaleDocumentsForGroup } from "@/app/actions/triage";
 import { formatNumber } from "@/lib/utils";
 
 interface StaleDocumentListProps {
   groups: StaleDocumentGroup[];
   initialLimit?: number;
+  initialSeed: string;
 }
 
-export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: StaleDocumentListProps) {
+export function StaleDocumentList({ groups: initialGroups, initialLimit = 50, initialSeed }: StaleDocumentListProps) {
   const [groups, setGroups] = useState(initialGroups);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [archiveResult, setArchiveResult] = useState<{ success: number; failed: number } | null>(null);
-  const [currentOffset, setCurrentOffset] = useState(initialLimit);
+  // Track offset per group category
+  const [groupOffsets, setGroupOffsets] = useState<Record<string, number>>(
+    () => Object.fromEntries(initialGroups.map(g => [g.category, initialLimit]))
+  );
+  // Use the same seed from the server for consistent pagination
+  const [shuffleSeed, setShuffleSeed] = useState<string>(initialSeed);
 
   const totalStale = groups.reduce((sum, g) => sum + g.count, 0);
 
@@ -79,18 +85,36 @@ export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: 
     });
   };
 
-  const handleLoadMore = async () => {
+  const handleLoadMore = async (groupCategory: "news" | "articles" | "other") => {
     setIsLoadingMore(true);
     try {
-      const newGroups = await getStaleDocuments(50, currentOffset, true);
+      const currentOffset = groupOffsets[groupCategory];
       
-      // Merge new documents into existing groups
-      setGroups(groups.map((group, index) => ({
-        ...group,
-        documents: [...group.documents, ...newGroups[index].documents]
-      })));
+      // Load more documents for this specific group
+      const newDocuments = await getStaleDocumentsForGroup(
+        groupCategory,
+        50,
+        currentOffset,
+        shuffleSeed
+      );
       
-      setCurrentOffset(currentOffset + 50);
+      // Merge new documents into the specific group, deduplicating by ID
+      setGroups(groups.map((group) => {
+        if (group.category !== groupCategory) return group;
+        
+        // Create a Set of existing IDs for O(1) lookup
+        const existingIds = new Set(group.documents.map(d => d.id));
+        // Filter out any duplicates from new documents
+        const uniqueNewDocs = newDocuments.filter(d => !existingIds.has(d.id));
+        
+        return { ...group, documents: [...group.documents, ...uniqueNewDocs] };
+      }));
+      
+      // Update offset for this group
+      setGroupOffsets({
+        ...groupOffsets,
+        [groupCategory]: currentOffset + 50,
+      });
     } catch (error) {
       console.error("Failed to load more documents:", error);
     } finally {
@@ -98,15 +122,19 @@ export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: 
     }
   };
 
-  const handleRandomize = async () => {
+  const handleShuffle = async () => {
     setIsRefreshing(true);
     try {
-      const newGroups = await getStaleDocuments(initialLimit, 0, true);
+      // Generate a new shuffle seed for a fresh random order
+      const newSeed = Math.random().toString(36).substring(2, 15);
+      setShuffleSeed(newSeed);
+      
+      const newGroups = await getStaleDocuments(initialLimit, 0, newSeed);
       setGroups(newGroups);
-      setCurrentOffset(initialLimit);
+      setGroupOffsets(Object.fromEntries(newGroups.map(g => [g.category, initialLimit])));
       setSelectedIds(new Set());
     } catch (error) {
-      console.error("Failed to randomize documents:", error);
+      console.error("Failed to shuffle documents:", error);
     } finally {
       setIsRefreshing(false);
     }
@@ -115,9 +143,10 @@ export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const newGroups = await getStaleDocuments(initialLimit, 0, true);
+      // Refresh with the same seed to reload from the beginning
+      const newGroups = await getStaleDocuments(initialLimit, 0, shuffleSeed);
       setGroups(newGroups);
-      setCurrentOffset(initialLimit);
+      setGroupOffsets(Object.fromEntries(newGroups.map(g => [g.category, initialLimit])));
       setSelectedIds(new Set());
     } catch (error) {
       console.error("Failed to refresh documents:", error);
@@ -166,7 +195,7 @@ export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: 
               </Badge>
             </CardTitle>
             <CardDescription>
-              Old documents past their freshness date (based on age alone)
+              Documents past their freshness date, shown in random order
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -187,7 +216,7 @@ export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: 
             <Button
               variant="outline"
               size="sm"
-              onClick={handleRandomize}
+              onClick={handleShuffle}
               disabled={isRefreshing}
               className="gap-2"
             >
@@ -283,7 +312,7 @@ export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: 
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleLoadMore}
+                        onClick={() => handleLoadMore(group.category as "news" | "articles" | "other")}
                         disabled={isLoadingMore}
                         className="gap-2"
                       >

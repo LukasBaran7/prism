@@ -45,9 +45,12 @@ export default async function TriagePage() {
   }
 
   const initialLimit = 50;
+  // Generate a random seed for initial load to ensure random order
+  const initialSeed = Math.random().toString(36).substring(2, 15);
+  
   const [velocityMetrics, staleGroups, lowEngagementSources] = await Promise.all([
     getVelocityMetrics(),
-    getStaleDocuments(initialLimit, 0, true), // Default to randomized
+    getStaleDocuments(initialLimit, 0, initialSeed), // Random order with consistent pagination
     getLowEngagementSources(5),
   ]);
 
@@ -69,7 +72,7 @@ export default async function TriagePage() {
 
           {/* Stale Documents */}
           <section>
-            <StaleDocumentList groups={staleGroups} initialLimit={initialLimit} />
+            <StaleDocumentList groups={staleGroups} initialLimit={initialLimit} initialSeed={initialSeed} />
           </section>
 
           {/* Two Column Layout */}

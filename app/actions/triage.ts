@@ -105,6 +105,21 @@ export async function getVelocityMetrics(): Promise<VelocityMetrics> {
 // Stale Document Detection
 // ============================================
 
+// Raw document from database (without ageInDays)
+interface RawDocument {
+  id: string;
+  readwiseId: string;
+  title: string | null;
+  url: string;
+  author: string | null;
+  siteName: string | null;
+  category: string;
+  wordCount: number | null;
+  createdAt: Date;
+  publishedDate: Date | null;
+  summary: string | null;
+}
+
 export interface StaleDocument {
   id: string;
   readwiseId: string;
@@ -129,10 +144,109 @@ export interface StaleDocumentGroup {
   documents: StaleDocument[];
 }
 
+export async function getStaleDocumentsForGroup(
+  groupCategory: "news" | "articles" | "other",
+  limit: number = 50,
+  offset: number = 0,
+  shuffleSeed?: string
+): Promise<StaleDocument[]> {
+  const settings = await getTriageSettings();
+  const now = Date.now();
+
+  // Define the group configuration
+  const groupConfig = {
+    news: {
+      categories: ["rss", "tweet"],
+      threshold: settings.staleNewsThreshold,
+    },
+    articles: {
+      categories: ["article"],
+      threshold: settings.staleArticleThreshold,
+    },
+    other: {
+      categories: ["email", "pdf", "epub", "video", "highlight", "note"],
+      threshold: settings.staleDefaultThreshold,
+    },
+  };
+
+  const group = groupConfig[groupCategory];
+  const cutoffDate = daysAgo(group.threshold);
+
+  let documents;
+
+  if (shuffleSeed) {
+    // Use seeded random ordering for consistent pagination
+    documents = await prisma.$queryRawUnsafe<RawDocument[]>(
+      `SELECT 
+        id, "readwiseId", title, url, author, "siteName", 
+        category, "wordCount", "createdAt", "publishedDate", summary
+      FROM "Document"
+      WHERE 
+        category = ANY($1::text[])
+        AND location = ANY($2::text[])
+        AND (
+          ("publishedDate" IS NOT NULL AND "publishedDate" < $3)
+          OR ("publishedDate" IS NULL AND "createdAt" < $4)
+        )
+      ORDER BY 
+        md5(id::text || $5)
+      OFFSET $6
+      LIMIT $7`,
+      group.categories,
+      ['new', 'later', 'shortlist'],
+      cutoffDate,
+      cutoffDate,
+      shuffleSeed,
+      offset,
+      limit
+    );
+  } else {
+    // Use chronological ordering by age (oldest first)
+    documents = await prisma.document.findMany({
+      where: {
+        category: { in: group.categories },
+        location: { in: ["new", "later", "shortlist"] },
+        OR: [
+          { publishedDate: { lt: cutoffDate } },
+          { publishedDate: null, createdAt: { lt: cutoffDate } },
+        ],
+      },
+      orderBy: [
+        { publishedDate: "asc" },
+        { createdAt: "asc" },
+      ],
+      skip: offset,
+      take: limit,
+      select: {
+        id: true,
+        readwiseId: true,
+        title: true,
+        url: true,
+        author: true,
+        siteName: true,
+        category: true,
+        wordCount: true,
+        createdAt: true,
+        publishedDate: true,
+        summary: true,
+      },
+    });
+  }
+
+  // Map to StaleDocument with age calculation
+  return documents.map((doc) => {
+    const dateToUse = doc.publishedDate || doc.createdAt;
+    return {
+      ...doc,
+      ageInDays: Math.floor((now - dateToUse.getTime()) / (1000 * 60 * 60 * 24)),
+    };
+  });
+}
+
 export async function getStaleDocuments(
   limit: number = 50,
   offset: number = 0,
-  randomize: boolean = true
+  shuffleSeed?: string
 ): Promise<StaleDocumentGroup[]> {
   const settings = await getTriageSettings();
   const now = Date.now();
@@ -180,44 +294,37 @@ export async function getStaleDocuments(
     });
 
     let documents;
-    if (randomize) {
-      // For random selection, we need to get more documents than needed
-      // and shuffle them, as Prisma doesn't support native random ordering consistently
-      const allDocuments = await prisma.document.findMany({
-        where: {
-          category: { in: group.categories },
-          location: { in: ["new", "later", "shortlist"] },
-          OR: [
-            { publishedDate: { lt: cutoffDate } },
-            { publishedDate: null, createdAt: { lt: cutoffDate } },
-          ],
-        },
-        select: {
-          id: true,
-          readwiseId: true,
-          title: true,
-          url: true,
-          author: true,
-          siteName: true,
-          category: true,
-          wordCount: true,
-          createdAt: true,
-          publishedDate: true,
-          summary: true,
-        },
-      });
-
-      // Fisher-Yates shuffle algorithm for better randomization
-      const shuffled = [...allDocuments];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-
-      // Apply pagination after shuffling
-      documents = shuffled.slice(offset, offset + limit);
+    
+    if (shuffleSeed) {
+      // Use seeded random ordering for consistent pagination
+      // By hashing the document ID with the seed, we get a deterministic "random" order
+      // MD5 hash gives us a consistent order that appears random but is reproducible with the same seed
+      documents = await prisma.$queryRawUnsafe<RawDocument[]>(
+        `SELECT 
+          id, "readwiseId", title, url, author, "siteName", 
+          category, "wordCount", "createdAt", "publishedDate", summary
+        FROM "Document"
+        WHERE 
+          category = ANY($1::text[])
+          AND location = ANY($2::text[])
+          AND (
+            ("publishedDate" IS NOT NULL AND "publishedDate" < $3)
+            OR ("publishedDate" IS NULL AND "createdAt" < $4)
+          )
+        ORDER BY 
+          md5(id::text || $5)
+        OFFSET $6
+        LIMIT $7`,
+        group.categories,
+        ['new', 'later', 'shortlist'],
+        cutoffDate,
+        cutoffDate,
+        shuffleSeed,
+        offset,
+        limit
+      );
     } else {
-      // When not randomizing, use chronological order (by publish date or created date)
+      // Use chronological ordering by age (oldest first)
       documents = await prisma.document.findMany({
         where: {
           category: { in: group.categories },
