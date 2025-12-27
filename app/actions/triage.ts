@@ -116,6 +116,7 @@ export interface StaleDocument {
   wordCount: number | null;
   createdAt: Date;
   publishedDate: Date | null;
+  summary: string | null;
   ageInDays: number;
 }
 
@@ -129,7 +130,9 @@ export interface StaleDocumentGroup {
 }
 
 export async function getStaleDocuments(
-  limit: number = 50
+  limit: number = 50,
+  offset: number = 0,
+  randomize: boolean = true
 ): Promise<StaleDocumentGroup[]> {
   const settings = await getTriageSettings();
   const now = Date.now();
@@ -162,25 +165,73 @@ export async function getStaleDocuments(
     const cutoffDate = daysAgo(group.threshold);
 
     // Get count and total word count
-    const [countResult, documents] = await Promise.all([
-      prisma.document.aggregate({
+    // Use publishedDate if available, otherwise fall back to createdAt
+    const countResult = await prisma.document.aggregate({
+      where: {
+        category: { in: group.categories },
+        location: { in: ["new", "later", "shortlist"] },
+        OR: [
+          { publishedDate: { lt: cutoffDate } },
+          { publishedDate: null, createdAt: { lt: cutoffDate } },
+        ],
+      },
+      _count: true,
+      _sum: { wordCount: true },
+    });
+
+    let documents;
+    if (randomize) {
+      // For random selection, we need to get more documents than needed
+      // and shuffle them, as Prisma doesn't support native random ordering consistently
+      const allDocuments = await prisma.document.findMany({
         where: {
           category: { in: group.categories },
           location: { in: ["new", "later", "shortlist"] },
-          createdAt: { lt: cutoffDate },
-          readingProgress: 0,
+          OR: [
+            { publishedDate: { lt: cutoffDate } },
+            { publishedDate: null, createdAt: { lt: cutoffDate } },
+          ],
         },
-        _count: true,
-        _sum: { wordCount: true },
-      }),
-      prisma.document.findMany({
+        select: {
+          id: true,
+          readwiseId: true,
+          title: true,
+          url: true,
+          author: true,
+          siteName: true,
+          category: true,
+          wordCount: true,
+          createdAt: true,
+          publishedDate: true,
+          summary: true,
+        },
+      });
+
+      // Fisher-Yates shuffle algorithm for better randomization
+      const shuffled = [...allDocuments];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      // Apply pagination after shuffling
+      documents = shuffled.slice(offset, offset + limit);
+    } else {
+      // When not randomizing, use chronological order (by publish date or created date)
+      documents = await prisma.document.findMany({
         where: {
           category: { in: group.categories },
           location: { in: ["new", "later", "shortlist"] },
-          createdAt: { lt: cutoffDate },
-          readingProgress: 0,
+          OR: [
+            { publishedDate: { lt: cutoffDate } },
+            { publishedDate: null, createdAt: { lt: cutoffDate } },
+          ],
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: [
+          { publishedDate: "asc" },
+          { createdAt: "asc" },
+        ],
+        skip: offset,
         take: limit,
         select: {
           id: true,
@@ -193,14 +244,19 @@ export async function getStaleDocuments(
           wordCount: true,
           createdAt: true,
           publishedDate: true,
+          summary: true,
         },
-      }),
-    ]);
+      });
+    }
 
-    const staleDocuments: StaleDocument[] = documents.map((doc) => ({
-      ...doc,
-      ageInDays: Math.floor((now - doc.createdAt.getTime()) / (1000 * 60 * 60 * 24)),
-    }));
+    const staleDocuments: StaleDocument[] = documents.map((doc) => {
+      // Use publishedDate if available, otherwise fall back to createdAt for age calculation
+      const dateToUse = doc.publishedDate || doc.createdAt;
+      return {
+        ...doc,
+        ageInDays: Math.floor((now - dateToUse.getTime()) / (1000 * 60 * 60 * 24)),
+      };
+    });
 
     results.push({
       category: group.category,
@@ -217,7 +273,8 @@ export async function getStaleDocuments(
 
 export async function getStaleDocumentsByAge(
   olderThanDays: number,
-  limit: number = 50
+  limit: number = 50,
+  offset: number = 0
 ): Promise<{ count: number; documents: StaleDocument[] }> {
   const cutoffDate = daysAgo(olderThanDays);
   const now = Date.now();
@@ -226,17 +283,22 @@ export async function getStaleDocumentsByAge(
     prisma.document.count({
       where: {
         location: { in: ["new", "later", "shortlist"] },
-        createdAt: { lt: cutoffDate },
-        readingProgress: 0,
+        OR: [
+          { publishedDate: { lt: cutoffDate } },
+          { publishedDate: null, createdAt: { lt: cutoffDate } },
+        ],
       },
     }),
     prisma.document.findMany({
       where: {
         location: { in: ["new", "later", "shortlist"] },
-        createdAt: { lt: cutoffDate },
-        readingProgress: 0,
+        OR: [
+          { publishedDate: { lt: cutoffDate } },
+          { publishedDate: null, createdAt: { lt: cutoffDate } },
+        ],
       },
       orderBy: { createdAt: "asc" },
+      skip: offset,
       take: limit,
       select: {
         id: true,
@@ -249,14 +311,18 @@ export async function getStaleDocumentsByAge(
         wordCount: true,
         createdAt: true,
         publishedDate: true,
+        summary: true,
       },
     }),
   ]);
 
-  const staleDocuments: StaleDocument[] = documents.map((doc) => ({
-    ...doc,
-    ageInDays: Math.floor((now - doc.createdAt.getTime()) / (1000 * 60 * 60 * 24)),
-  }));
+  const staleDocuments: StaleDocument[] = documents.map((doc) => {
+    const dateToUse = doc.publishedDate || doc.createdAt;
+    return {
+      ...doc,
+      ageInDays: Math.floor((now - dateToUse.getTime()) / (1000 * 60 * 60 * 24)),
+    };
+  });
 
   return { count, documents: staleDocuments };
 }
@@ -482,14 +548,15 @@ export async function archiveStaleDocuments(criteria: {
   // Build the where clause
   const whereClause: {
     location: { in: string[] };
-    createdAt: { lt: Date };
-    readingProgress: number;
+    OR: Array<{ publishedDate: { lt: Date } } | { publishedDate: null; createdAt: { lt: Date } }>;
     category?: { in: string[] };
     siteName?: { in: string[] };
   } = {
     location: { in: ["new", "later", "shortlist"] },
-    createdAt: { lt: cutoffDate },
-    readingProgress: 0,
+    OR: [
+      { publishedDate: { lt: cutoffDate } },
+      { publishedDate: null, createdAt: { lt: cutoffDate } },
+    ],
   };
 
   if (criteria.categories && criteria.categories.length > 0) {

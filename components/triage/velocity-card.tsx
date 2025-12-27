@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Minus, Clock, BookOpen, AlertTriangle } from "lucide-react";
 import { VelocityMetrics } from "@/app/actions/triage";
+import { formatNumber } from "@/lib/utils";
 
 interface VelocityCardProps {
   metrics: VelocityMetrics;
@@ -73,10 +74,10 @@ export function VelocityCard({ metrics }: VelocityCardProps) {
               <BookOpen className="h-4 w-4" />
               Unread Queue
             </p>
-            <div className="text-3xl font-bold">{metrics.unreadCount.toLocaleString()}</div>
+            <div className="text-3xl font-bold">{formatNumber(metrics.unreadCount)}</div>
             <div className="flex items-center gap-1 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
-              ~{metrics.estimatedReadingHours.toLocaleString()} hours to read
+              ~{formatNumber(metrics.estimatedReadingHours)} hours to read
             </div>
           </div>
 
@@ -87,7 +88,7 @@ export function VelocityCard({ metrics }: VelocityCardProps) {
               Yearly Projection
             </p>
             <div className={`text-3xl font-bold ${metrics.projectedYearlyGrowth > 0 ? "text-red-500" : metrics.projectedYearlyGrowth < 0 ? "text-green-500" : ""}`}>
-              {metrics.projectedYearlyGrowth >= 0 ? "+" : ""}{metrics.projectedYearlyGrowth.toLocaleString()}
+              {metrics.projectedYearlyGrowth >= 0 ? "+" : ""}{formatNumber(metrics.projectedYearlyGrowth)}
             </div>
             <p className="text-sm text-muted-foreground">
               {metrics.projectedYearlyGrowth > 0 

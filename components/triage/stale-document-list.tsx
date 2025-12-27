@@ -12,18 +12,26 @@ import {
   Clock,
   FileText,
   Rss,
-  AlertCircle
+  AlertCircle,
+  Shuffle,
+  RefreshCw
 } from "lucide-react";
-import { StaleDocumentGroup, StaleDocument, archiveDocuments } from "@/app/actions/triage";
+import { StaleDocumentGroup, StaleDocument, archiveDocuments, getStaleDocuments } from "@/app/actions/triage";
+import { formatNumber } from "@/lib/utils";
 
 interface StaleDocumentListProps {
   groups: StaleDocumentGroup[];
+  initialLimit?: number;
 }
 
-export function StaleDocumentList({ groups }: StaleDocumentListProps) {
+export function StaleDocumentList({ groups: initialGroups, initialLimit = 50 }: StaleDocumentListProps) {
+  const [groups, setGroups] = useState(initialGroups);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [archiveResult, setArchiveResult] = useState<{ success: number; failed: number } | null>(null);
+  const [currentOffset, setCurrentOffset] = useState(initialLimit);
 
   const totalStale = groups.reduce((sum, g) => sum + g.count, 0);
 
@@ -55,11 +63,67 @@ export function StaleDocumentList({ groups }: StaleDocumentListProps) {
     startTransition(async () => {
       const result = await archiveDocuments(Array.from(selectedIds));
       setArchiveResult(result);
+      
+      // Remove archived documents from the view
+      const archivedSet = new Set(Array.from(selectedIds));
+      setGroups(groups.map(group => ({
+        ...group,
+        documents: group.documents.filter(doc => !archivedSet.has(doc.readwiseId)),
+        count: group.count - group.documents.filter(doc => archivedSet.has(doc.readwiseId)).length
+      })));
+      
       setSelectedIds(new Set());
       
       // Clear result after 5 seconds
       setTimeout(() => setArchiveResult(null), 5000);
     });
+  };
+
+  const handleLoadMore = async () => {
+    setIsLoadingMore(true);
+    try {
+      const newGroups = await getStaleDocuments(50, currentOffset, true);
+      
+      // Merge new documents into existing groups
+      setGroups(groups.map((group, index) => ({
+        ...group,
+        documents: [...group.documents, ...newGroups[index].documents]
+      })));
+      
+      setCurrentOffset(currentOffset + 50);
+    } catch (error) {
+      console.error("Failed to load more documents:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleRandomize = async () => {
+    setIsRefreshing(true);
+    try {
+      const newGroups = await getStaleDocuments(initialLimit, 0, true);
+      setGroups(newGroups);
+      setCurrentOffset(initialLimit);
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error("Failed to randomize documents:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const newGroups = await getStaleDocuments(initialLimit, 0, true);
+      setGroups(newGroups);
+      setCurrentOffset(initialLimit);
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error("Failed to refresh documents:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   if (totalStale === 0) {
@@ -71,7 +135,7 @@ export function StaleDocumentList({ groups }: StaleDocumentListProps) {
             Stale Documents
           </CardTitle>
           <CardDescription>
-            Documents you saved but never opened
+            Old documents past their freshness date
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -92,33 +156,63 @@ export function StaleDocumentList({ groups }: StaleDocumentListProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex-1">
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-amber-500" />
               Stale Documents
               <Badge variant="secondary" className="ml-2">
-                {totalStale.toLocaleString()} total
+                {formatNumber(totalStale)} total
               </Badge>
             </CardTitle>
             <CardDescription>
-              Documents you saved but never opened, past their freshness date
+              Old documents past their freshness date (based on age alone)
             </CardDescription>
           </div>
-          {selectedIds.size > 0 && (
-            <Button 
-              onClick={handleArchiveSelected}
-              disabled={isPending}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
               className="gap-2"
             >
-              {isPending ? (
+              {isRefreshing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Archive className="h-4 w-4" />
+                <RefreshCw className="h-4 w-4" />
               )}
-              Archive {selectedIds.size} Selected
+              Refresh
             </Button>
-          )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRandomize}
+              disabled={isRefreshing}
+              className="gap-2"
+            >
+              {isRefreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Shuffle className="h-4 w-4" />
+              )}
+              Shuffle
+            </Button>
+            {selectedIds.size > 0 && (
+              <Button 
+                onClick={handleArchiveSelected}
+                disabled={isPending}
+                className="gap-2"
+              >
+                {isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Archive className="h-4 w-4" />
+                )}
+                Archive {selectedIds.size}
+              </Button>
+            )}
+          </div>
         </div>
         {archiveResult && (
           <div className={`mt-2 p-2 rounded text-sm ${archiveResult.failed > 0 ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>
@@ -172,7 +266,7 @@ export function StaleDocumentList({ groups }: StaleDocumentListProps) {
                   </div>
                 </div>
 
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                <div className="space-y-2 max-h-[600px] overflow-y-auto">
                   {group.documents.map((doc) => (
                     <DocumentRow
                       key={doc.id}
@@ -182,8 +276,26 @@ export function StaleDocumentList({ groups }: StaleDocumentListProps) {
                     />
                   ))}
                   {group.count > group.documents.length && (
-                    <div className="text-center py-4 text-sm text-muted-foreground">
-                      Showing {group.documents.length} of {group.count} documents
+                    <div className="text-center py-4 space-y-2">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {group.documents.length} of {group.count} documents
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleLoadMore}
+                        disabled={isLoadingMore}
+                        className="gap-2"
+                      >
+                        {isLoadingMore ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          <>Load More</>
+                        )}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -203,24 +315,28 @@ interface DocumentRowProps {
 }
 
 function DocumentRow({ document, isSelected, onToggle }: DocumentRowProps) {
+  const [showSummary, setShowSummary] = useState(false);
+
   return (
     <div
-      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
         isSelected 
           ? "bg-primary/5 border-primary/30" 
           : "bg-card hover:bg-muted/50"
       }`}
-      onClick={onToggle}
     >
       <input
         type="checkbox"
         checked={isSelected}
         onChange={onToggle}
-        className="h-4 w-4 rounded border-gray-300"
+        className="h-4 w-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
         onClick={(e) => e.stopPropagation()}
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div 
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={onToggle}
+        >
           <span className="font-medium truncate">
             {document.title || "Untitled"}
           </span>
@@ -234,7 +350,10 @@ function DocumentRow({ document, isSelected, onToggle }: DocumentRowProps) {
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+        <div 
+          className="flex items-center gap-2 text-xs text-muted-foreground mt-1 cursor-pointer"
+          onClick={onToggle}
+        >
           {document.siteName && <span>{document.siteName}</span>}
           {document.author && (
             <>
@@ -245,10 +364,32 @@ function DocumentRow({ document, isSelected, onToggle }: DocumentRowProps) {
           {document.wordCount && (
             <>
               <span>•</span>
-              <span>{document.wordCount.toLocaleString()} words</span>
+              <span>{formatNumber(document.wordCount)} words</span>
+            </>
+          )}
+          {document.summary && (
+            <>
+              <span>•</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSummary(!showSummary);
+                }}
+                className="text-primary hover:underline"
+              >
+                {showSummary ? "Hide" : "Show"} summary
+              </button>
             </>
           )}
         </div>
+        {showSummary && document.summary && (
+          <div 
+            className="mt-2 text-sm text-muted-foreground border-l-2 border-primary/30 pl-3 italic"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {document.summary}
+          </div>
+        )}
       </div>
       <Badge variant="outline" className="flex-shrink-0">
         {document.ageInDays}d old

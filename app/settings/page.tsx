@@ -7,6 +7,7 @@ import { hasApiToken, getTriageSettings } from "@/app/actions/settings";
 import { getDocumentCount } from "@/app/actions/documents";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { formatNumber } from "@/lib/utils";
 
 export default async function SettingsPage() {
   const [tokenConfigured, docCount, triageSettings] = await Promise.all([
@@ -39,7 +40,7 @@ export default async function SettingsPage() {
 
           {docCount > 0 && (
             <div className="text-center text-sm text-muted-foreground">
-              {docCount.toLocaleString()} documents in database
+              {formatNumber(docCount)} documents in database
             </div>
           )}
         </div>

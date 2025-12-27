@@ -2,6 +2,7 @@
 
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatNumber } from "@/lib/utils";
 
 interface CategoryChartProps {
   data: Record<string, number>;
@@ -67,7 +68,7 @@ export function CategoryChart({ data }: CategoryChartProps) {
                 tick={{ fontSize: 12 }}
               />
               <Tooltip
-                formatter={(value) => [Number(value).toLocaleString(), "Documents"]}
+                formatter={(value) => [formatNumber(Number(value)), "Documents"]}
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",
                   borderColor: "hsl(var(--border))",

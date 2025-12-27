@@ -44,9 +44,10 @@ export default async function TriagePage() {
     );
   }
 
+  const initialLimit = 50;
   const [velocityMetrics, staleGroups, lowEngagementSources] = await Promise.all([
     getVelocityMetrics(),
-    getStaleDocuments(50),
+    getStaleDocuments(initialLimit, 0, true), // Default to randomized
     getLowEngagementSources(5),
   ]);
 
@@ -68,7 +69,7 @@ export default async function TriagePage() {
 
           {/* Stale Documents */}
           <section>
-            <StaleDocumentList groups={staleGroups} />
+            <StaleDocumentList groups={staleGroups} initialLimit={initialLimit} />
           </section>
 
           {/* Two Column Layout */}

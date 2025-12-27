@@ -13,6 +13,7 @@ import {
   Clock
 } from "lucide-react";
 import { getStaleDocumentsByAge, archiveStaleDocuments } from "@/app/actions/triage";
+import { formatNumber } from "@/lib/utils";
 
 export function BankruptcyPanel() {
   const [days, setDays] = useState(180);
@@ -58,14 +59,14 @@ export function BankruptcyPanel() {
           Reading Bankruptcy
         </CardTitle>
         <CardDescription>
-          Admit defeat on old content and start fresh. Archive everything older than a certain age that you never started reading.
+          Admit defeat on old content and start fresh. Archive everything older than a certain age.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {result ? (
           <div className="space-y-4">
             <div className="bg-green-100 text-green-800 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold">{result.success.toLocaleString()}</div>
+              <div className="text-2xl font-bold">{formatNumber(result.success)}</div>
               <div className="text-sm">documents archived</div>
               {result.failed > 0 && (
                 <div className="text-amber-600 text-sm mt-2">
@@ -92,8 +93,8 @@ export function BankruptcyPanel() {
                 Confirm Bankruptcy Declaration
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                You are about to archive <strong>{previewCount?.toLocaleString()}</strong> documents 
-                that are older than <strong>{days}</strong> days and have never been opened.
+                You are about to archive <strong>{previewCount ? formatNumber(previewCount) : 0}</strong> documents 
+                that are older than <strong>{days}</strong> days.
               </p>
               <p className="text-sm text-destructive font-medium">
                 ⚠️ This action will sync to Readwise Reader and cannot be undone.
@@ -184,7 +185,7 @@ export function BankruptcyPanel() {
                   {isLoadingPreview ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : previewCount !== null ? (
-                    previewCount.toLocaleString()
+                    formatNumber(previewCount)
                   ) : (
                     "—"
                   )}
