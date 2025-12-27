@@ -1,0 +1,59 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Document {
+  id              String    @id @default(cuid())
+  readwiseId      String    @unique
+  url             String
+  sourceUrl       String?
+  title           String?
+  author          String?
+  summary         String?
+  category        String    // article, email, rss, highlight, note, pdf, epub, tweet, video
+  location        String?   // new, later, archive, feed, shortlist (nullable for highlights)
+  tags            String[]  // PostgreSQL array
+  siteName        String?
+  wordCount       Int?
+  publishedDate   DateTime?
+  firstOpenedAt   DateTime?
+  lastOpenedAt    DateTime?
+  lastMovedAt     DateTime?
+  readingProgress Float     @default(0)
+  parentId        String?
+  createdAt       DateTime
+  updatedAt       DateTime
+
+  @@index([category])
+  @@index([location])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model SyncState {
+  id          String    @id @default("main")
+  lastSyncAt  DateTime?
+  lastCursor  String?
+  totalSynced Int       @default(0)
+  status      String    @default("idle") // idle, syncing, error
+  errorMsg    String?
+  updatedAt   DateTime  @default(now()) @updatedAt
+}
+
+model Settings {
+  id                    String   @id @default("main")
+  apiToken              String?
+  // Triage thresholds (in days)
+  staleNewsThreshold    Int      @default(30)
+  staleArticleThreshold Int      @default(90)
+  staleDefaultThreshold Int      @default(180)
+  updatedAt             DateTime @default(now()) @updatedAt
+}
