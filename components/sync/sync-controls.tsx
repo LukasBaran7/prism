@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { startSync, syncNextBatch, resetSync, clearError, skipProblematicCursor, getSyncState, SyncProgress } from "@/app/actions/sync";
 import { Loader2, RefreshCw, Play, RotateCcw, CheckCircle, XCircle, AlertCircle, AlertTriangle } from "lucide-react";
+import { formatNumber } from "@/lib/utils";
 
 interface SyncControlsProps {
   hasToken: boolean;
@@ -174,7 +175,7 @@ export function SyncControls({ hasToken }: SyncControlsProps) {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <div className="text-muted-foreground">Documents Synced</div>
-                <div className="text-2xl font-bold">{totalInDb.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{formatNumber(totalInDb)}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Last Sync</div>
@@ -189,7 +190,7 @@ export function SyncControls({ hasToken }: SyncControlsProps) {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Syncing documents...</span>
-                  <span>{progress.totalSynced.toLocaleString()} fetched</span>
+                  <span>{formatNumber(progress.totalSynced)} fetched</span>
                 </div>
                 <Progress value={undefined} className="h-2" />
                 <div className="text-xs text-muted-foreground">
@@ -251,7 +252,7 @@ export function SyncControls({ hasToken }: SyncControlsProps) {
             {isComplete && (
               <div className="flex items-center gap-2 text-sm text-green-600">
                 <CheckCircle className="h-4 w-4" />
-                Sync completed! {progress.totalSynced.toLocaleString()} documents synced.
+                Sync completed! {formatNumber(progress.totalSynced)} documents synced.
               </div>
             )}
 

@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatNumber } from "@/lib/utils";
 
 interface TagsChartProps {
   data: { tag: string; count: number }[];
@@ -44,7 +45,7 @@ export function TagsChart({ data }: TagsChartProps) {
               >
                 {item.tag}
                 <span className="ml-1 text-muted-foreground">
-                  ({item.count.toLocaleString()})
+                  ({formatNumber(item.count)})
                 </span>
               </Badge>
             );

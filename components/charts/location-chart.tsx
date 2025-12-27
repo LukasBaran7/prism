@@ -2,6 +2,7 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatNumber } from "@/lib/utils";
 
 interface LocationChartProps {
   data: Record<string, number>;
@@ -75,7 +76,7 @@ export function LocationChart({ data }: LocationChartProps) {
                 ))}
               </Pie>
               <Tooltip
-                formatter={(value) => Number(value).toLocaleString()}
+                formatter={(value) => formatNumber(Number(value))}
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",
                   borderColor: "hsl(var(--border))",

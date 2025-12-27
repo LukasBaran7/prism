@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LucideIcon } from "lucide-react";
+import { formatNumber } from "@/lib/utils";
 
 interface StatCardProps {
   title: string;
@@ -23,7 +24,7 @@ export function StatCard({ title, value, description, icon: Icon, trend }: StatC
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">
-          {typeof value === "number" ? value.toLocaleString() : value}
+          {typeof value === "number" ? formatNumber(value) : value}
         </div>
         {description && (
           <p className="text-xs text-muted-foreground mt-1">{description}</p>

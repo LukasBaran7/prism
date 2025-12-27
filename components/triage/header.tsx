@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatNumber } from "@/lib/utils";
 
 interface TriageHeaderProps {
   staleCount: number;
@@ -27,12 +28,12 @@ export function TriageHeader({ staleCount, unreadCount }: TriageHeaderProps) {
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Unread:</span>
-            <span className="font-semibold">{unreadCount.toLocaleString()}</span>
+            <span className="font-semibold">{formatNumber(unreadCount)}</span>
           </div>
           <div className="h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Stale:</span>
-            <span className="font-semibold text-amber-600">{staleCount.toLocaleString()}</span>
+            <span className="font-semibold text-amber-600">{formatNumber(staleCount)}</span>
           </div>
         </div>
       </div>

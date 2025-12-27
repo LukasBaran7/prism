@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatNumber } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const tokenConfigured = await hasApiToken();
@@ -96,7 +97,7 @@ export default async function DashboardPage() {
                 title="Total Documents"
                 value={stats.total}
                 icon={FileText}
-                description={`${stats.avgWordsPerDocument.toLocaleString()} avg words`}
+                description={`${formatNumber(stats.avgWordsPerDocument)} avg words`}
               />
               <StatCard
                 title="Read Later"
@@ -149,15 +150,15 @@ export default async function DashboardPage() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Not Started</span>
-                      <span className="font-medium">{stats.readingProgress.notStarted.toLocaleString()}</span>
+                      <span className="font-medium">{formatNumber(stats.readingProgress.notStarted)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">In Progress</span>
-                      <span className="font-medium">{stats.readingProgress.inProgress.toLocaleString()}</span>
+                      <span className="font-medium">{formatNumber(stats.readingProgress.inProgress)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Completed</span>
-                      <span className="font-medium">{stats.readingProgress.completed.toLocaleString()}</span>
+                      <span className="font-medium">{formatNumber(stats.readingProgress.completed)}</span>
                     </div>
                   </div>
                 </CardContent>
