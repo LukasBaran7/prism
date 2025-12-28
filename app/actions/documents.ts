@@ -83,13 +83,22 @@ export async function getDocumentStats(): Promise<DocumentStats> {
       },
     }),
 
-    // Read this week (archived with lastOpenedAt in last 7 days)
+    // Read this week (archived with lastOpenedAt or lastMovedAt in last 7 days)
     prisma.document.count({
       where: {
         location: "archive",
-        lastOpenedAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-        },
+        OR: [
+          {
+            lastOpenedAt: {
+              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            },
+          },
+          {
+            lastMovedAt: {
+              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            },
+          },
+        ],
       },
     }),
 
@@ -97,9 +106,18 @@ export async function getDocumentStats(): Promise<DocumentStats> {
     prisma.document.count({
       where: {
         location: "archive",
-        lastOpenedAt: {
-          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-        },
+        OR: [
+          {
+            lastOpenedAt: {
+              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            },
+          },
+          {
+            lastMovedAt: {
+              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            },
+          },
+        ],
       },
     }),
 
@@ -199,10 +217,13 @@ export async function getDocumentsReadOverTime(
   const documents = await prisma.document.findMany({
     where: {
       location: "archive",
-      lastOpenedAt: { gte: startDate },
+      OR: [
+        { lastOpenedAt: { gte: startDate } },
+        { lastMovedAt: { gte: startDate } },
+      ],
     },
-    select: { lastOpenedAt: true },
-    orderBy: { lastOpenedAt: "asc" },
+    select: { lastOpenedAt: true, lastMovedAt: true },
+    orderBy: { lastMovedAt: "asc" },
   });
 
   // Group by date
@@ -215,10 +236,19 @@ export async function getDocumentsReadOverTime(
     countByDate[dateStr] = 0;
   }
 
-  // Count documents per date
+  // Count documents per date - use the most recent date between lastOpenedAt and lastMovedAt
   for (const doc of documents) {
-    if (doc.lastOpenedAt) {
-      const dateStr = doc.lastOpenedAt.toISOString().split("T")[0];
+    const openedDate = doc.lastOpenedAt;
+    const movedDate = doc.lastMovedAt;
+
+    // Use the most recent date for counting (opened takes precedence if both exist)
+    let relevantDate = movedDate;
+    if (openedDate && (!movedDate || openedDate > movedDate)) {
+      relevantDate = openedDate;
+    }
+
+    if (relevantDate) {
+      const dateStr = relevantDate.toISOString().split("T")[0];
       if (dateStr in countByDate) {
         countByDate[dateStr]++;
       }
@@ -265,5 +295,104 @@ export async function searchDocuments(query: string, limit = 20) {
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+}
+
+export async function getDocumentsAddedOverTimeWeeks(
+  weeks = 12
+): Promise<TimeSeriesData[]> {
+  const startDate = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000);
+
+  const documents = await prisma.document.findMany({
+    where: {
+      createdAt: { gte: startDate },
+    },
+    select: { createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Group by week
+  const countByWeek: Record<string, number> = {};
+
+  // Initialize all weeks with 0
+  for (let i = 0; i < weeks; i++) {
+    const date = new Date(Date.now() - (weeks - 1 - i) * 7 * 24 * 60 * 60 * 1000);
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+    const weekKey = weekStart.toISOString().split("T")[0];
+    countByWeek[weekKey] = 0;
+  }
+
+  // Count documents per week
+  for (const doc of documents) {
+    const date = new Date(doc.createdAt);
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+    const weekKey = weekStart.toISOString().split("T")[0];
+    if (weekKey in countByWeek) {
+      countByWeek[weekKey]++;
+    }
+  }
+
+  return Object.entries(countByWeek).map(([date, count]) => ({
+    date,
+    count,
+  }));
+}
+
+export async function getDocumentsReadOverTimeWeeks(
+  weeks = 12
+): Promise<TimeSeriesData[]> {
+  const startDate = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000);
+
+  const documents = await prisma.document.findMany({
+    where: {
+      location: "archive",
+      OR: [
+        { lastOpenedAt: { gte: startDate } },
+        { lastMovedAt: { gte: startDate } },
+      ],
+    },
+    select: { lastOpenedAt: true, lastMovedAt: true },
+    orderBy: { lastMovedAt: "asc" },
+  });
+
+  // Group by week
+  const countByWeek: Record<string, number> = {};
+
+  // Initialize all weeks with 0
+  for (let i = 0; i < weeks; i++) {
+    const date = new Date(Date.now() - (weeks - 1 - i) * 7 * 24 * 60 * 60 * 1000);
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+    const weekKey = weekStart.toISOString().split("T")[0];
+    countByWeek[weekKey] = 0;
+  }
+
+  // Count documents per week - use the most recent date between lastOpenedAt and lastMovedAt
+  for (const doc of documents) {
+    const openedDate = doc.lastOpenedAt;
+    const movedDate = doc.lastMovedAt;
+
+    // Use the most recent date for counting (opened takes precedence if both exist)
+    let relevantDate = movedDate;
+    if (openedDate && (!movedDate || openedDate > movedDate)) {
+      relevantDate = openedDate;
+    }
+
+    if (relevantDate && relevantDate >= startDate) {
+      const date = new Date(relevantDate);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+      const weekKey = weekStart.toISOString().split("T")[0];
+      if (weekKey in countByWeek) {
+        countByWeek[weekKey]++;
+      }
+    }
+  }
+
+  return Object.entries(countByWeek).map(([date, count]) => ({
+    date,
+    count,
+  }));
 }
 
