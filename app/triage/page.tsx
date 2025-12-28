@@ -4,11 +4,13 @@ import { TriageHeader } from "@/components/triage/header";
 import { VelocityCard } from "@/components/triage/velocity-card";
 import { StaleDocumentList } from "@/components/triage/stale-document-list";
 import { SourceEngagementTable } from "@/components/triage/source-engagement-table";
+import { TopDomainsTable } from "@/components/triage/top-domains-table";
 import { BankruptcyPanel } from "@/components/triage/bankruptcy-panel";
-import { 
-  getVelocityMetrics, 
-  getStaleDocuments, 
-  getLowEngagementSources 
+import {
+  getVelocityMetrics,
+  getStaleDocuments,
+  getLowEngagementSources,
+  getTopDomainsInLater
 } from "@/app/actions/triage";
 import { hasApiToken } from "@/app/actions/settings";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,10 +50,11 @@ export default async function TriagePage() {
   // Generate a random seed for initial load to ensure random order
   const initialSeed = Math.random().toString(36).substring(2, 15);
   
-  const [velocityMetrics, staleGroups, lowEngagementSources] = await Promise.all([
+  const [velocityMetrics, staleGroups, lowEngagementSources, topDomains] = await Promise.all([
     getVelocityMetrics(),
     getStaleDocuments(initialLimit, 0, initialSeed), // Random order with consistent pagination
     getLowEngagementSources(5),
+    getTopDomainsInLater(50),
   ]);
 
   const totalStale = staleGroups.reduce((sum, g) => sum + g.count, 0);
@@ -73,6 +76,11 @@ export default async function TriagePage() {
           {/* Stale Documents */}
           <section>
             <StaleDocumentList groups={staleGroups} initialLimit={initialLimit} initialSeed={initialSeed} />
+          </section>
+
+          {/* Top Domains */}
+          <section>
+            <TopDomainsTable domains={topDomains} />
           </section>
 
           {/* Two Column Layout */}

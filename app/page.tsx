@@ -2,23 +2,17 @@ export const dynamic = "force-dynamic";
 
 import { DashboardHeader } from "@/components/dashboard/header";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { LocationChart } from "@/components/charts/location-chart";
-import { CategoryChart } from "@/components/charts/category-chart";
 import { ActivityChart } from "@/components/charts/activity-chart";
-import { TagsChart } from "@/components/charts/tags-chart";
-import { RecentDocuments } from "@/components/documents/recent-documents";
 import {
   getDocumentStats,
-  getDocumentsAddedOverTime,
-  getDocumentsReadOverTime,
-  getRecentDocuments,
+  getDocumentsAddedOverTimeWeeks,
+  getDocumentsReadOverTimeWeeks,
 } from "@/app/actions/documents";
 import { hasApiToken } from "@/app/actions/settings";
-import { 
-  BookOpen, 
-  Clock, 
-  Archive, 
-  TrendingUp, 
+import {
+  BookOpen,
+  Clock,
+  Archive,
   FileText,
   Calendar,
 } from "lucide-react";
@@ -26,6 +20,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils";
+import DashboardClient from "./dashboard-client";
 
 export default async function DashboardPage() {
   const tokenConfigured = await hasApiToken();
@@ -56,26 +51,22 @@ export default async function DashboardPage() {
     );
   }
 
-  const [stats, addedOverTime, readOverTime, recentDocs] = await Promise.all([
+  const [stats, addedOverTime, readOverTime] = await Promise.all([
     getDocumentStats(),
-    getDocumentsAddedOverTime(30),
-    getDocumentsReadOverTime(30),
-    getRecentDocuments(10),
+    getDocumentsAddedOverTimeWeeks(12),
+    getDocumentsReadOverTimeWeeks(12),
   ]);
 
   // Calculate some derived stats
   const readLaterCount = stats.byLocation["later"] || 0;
   const archivedCount = stats.byLocation["archive"] || 0;
-  const completionRate = stats.total > 0 
-    ? Math.round((stats.readingProgress.completed / stats.total) * 100) 
-    : 0;
 
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader />
-      
-      <main className="container mx-auto py-8 px-4">
-        {stats.total === 0 ? (
+
+      {stats.total === 0 ? (
+        <main className="container mx-auto py-8 px-4">
           <Card className="max-w-lg mx-auto">
             <CardHeader className="text-center">
               <CardTitle>No Documents Yet</CardTitle>
@@ -89,87 +80,14 @@ export default async function DashboardPage() {
               </Button>
             </CardContent>
           </Card>
-        ) : (
-          <div className="space-y-8">
-            {/* Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                title="Total Documents"
-                value={stats.total}
-                icon={FileText}
-                description={`${formatNumber(stats.avgWordsPerDocument)} avg words`}
-              />
-              <StatCard
-                title="Read Later"
-                value={readLaterCount}
-                icon={Clock}
-                description="Documents in queue"
-              />
-              <StatCard
-                title="Archived"
-                value={archivedCount}
-                icon={Archive}
-                description="Documents read"
-              />
-              <StatCard
-                title="This Week"
-                value={stats.readThisWeek}
-                icon={Calendar}
-                trend={{ value: stats.recentlyAdded, label: "added" }}
-              />
-            </div>
-
-            {/* Charts Row */}
-            <div className="grid gap-4 lg:grid-cols-2">
-              <LocationChart data={stats.byLocation} />
-              <CategoryChart data={stats.byCategory} />
-            </div>
-
-            {/* Activity Chart */}
-            <div className="grid gap-4 lg:grid-cols-1">
-              <ActivityChart addedData={addedOverTime} readData={readOverTime} />
-            </div>
-
-            {/* Tags and Completion */}
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                <TagsChart data={stats.topTags} />
-              </div>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Reading Progress
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="text-center">
-                    <div className="text-4xl font-bold">{completionRate}%</div>
-                    <div className="text-sm text-muted-foreground">Completion Rate</div>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Not Started</span>
-                      <span className="font-medium">{formatNumber(stats.readingProgress.notStarted)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">In Progress</span>
-                      <span className="font-medium">{formatNumber(stats.readingProgress.inProgress)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Completed</span>
-                      <span className="font-medium">{formatNumber(stats.readingProgress.completed)}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Recent Documents */}
-            <RecentDocuments documents={recentDocs} />
-          </div>
-        )}
-      </main>
+        </main>
+      ) : (
+        <DashboardClient
+          initialStats={stats}
+          initialAddedData={addedOverTime}
+          initialReadData={readOverTime}
+        />
+      )}
     </div>
   );
 }

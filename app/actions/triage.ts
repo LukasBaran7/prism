@@ -507,6 +507,68 @@ export async function getLowEngagementSources(
 }
 
 // ============================================
+// Top Domains Analysis
+// ============================================
+
+export interface DomainStats {
+  domain: string;
+  count: number;
+  totalWordCount: number;
+}
+
+export async function getTopDomainsInLater(limit: number = 50): Promise<DomainStats[]> {
+  // Get all documents in 'later' location
+  const documents = await prisma.document.findMany({
+    where: {
+      location: "later",
+    },
+    select: {
+      url: true,
+      siteName: true,
+      wordCount: true,
+    },
+  });
+
+  // Aggregate by domain
+  const domainMap = new Map<string, { count: number; totalWordCount: number }>();
+
+  for (const doc of documents) {
+    let domain = doc.siteName;
+
+    // If siteName is not available, extract domain from URL
+    if (!domain && doc.url) {
+      try {
+        const url = new URL(doc.url);
+        domain = url.hostname.replace(/^www\./, ''); // Remove www. prefix
+      } catch {
+        // If URL parsing fails, skip this document
+        continue;
+      }
+    }
+
+    if (!domain) continue;
+
+    const current = domainMap.get(domain) || { count: 0, totalWordCount: 0 };
+    current.count++;
+    current.totalWordCount += doc.wordCount || 0;
+
+    domainMap.set(domain, current);
+  }
+
+  // Convert to array and sort by count (descending)
+  const domains: DomainStats[] = Array.from(domainMap.entries())
+    .map(([domain, stats]) => ({
+      domain,
+      count: stats.count,
+      totalWordCount: stats.totalWordCount,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+
+  return domains;
+}
+
+// ============================================
 // Tag Engagement Analysis
 // ============================================
 
