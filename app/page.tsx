@@ -7,6 +7,8 @@ import {
   getDocumentStats,
   getDocumentsAddedOverTimeWeeks,
   getDocumentsReadOverTimeWeeks,
+  getDocumentsAddedOverTime,
+  getDocumentsReadOverTime,
 } from "@/app/actions/documents";
 import { hasApiToken } from "@/app/actions/settings";
 import {
@@ -51,10 +53,12 @@ export default async function DashboardPage() {
     );
   }
 
-  const [stats, addedOverTime, readOverTime] = await Promise.all([
+  const [stats, addedOverTime, readOverTime, dailyAddedOverTime, dailyReadOverTime] = await Promise.all([
     getDocumentStats(),
     getDocumentsAddedOverTimeWeeks(12),
     getDocumentsReadOverTimeWeeks(12),
+    getDocumentsAddedOverTime(14),
+    getDocumentsReadOverTime(14),
   ]);
 
   // Calculate some derived stats
@@ -86,6 +90,8 @@ export default async function DashboardPage() {
           initialStats={stats}
           initialAddedData={addedOverTime}
           initialReadData={readOverTime}
+          initialDailyAddedData={dailyAddedOverTime}
+          initialDailyReadData={dailyReadOverTime}
         />
       )}
     </div>
