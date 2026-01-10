@@ -3,9 +3,12 @@
 import { useState, useEffect } from "react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ActivityChart } from "@/components/charts/activity-chart";
+import { DailyActivityChart } from "@/components/charts/daily-activity-chart";
 import {
   getDocumentsAddedOverTimeWeeks,
   getDocumentsReadOverTimeWeeks,
+  getDocumentsAddedOverTime,
+  getDocumentsReadOverTime,
 } from "@/app/actions/documents";
 import { TimeSeriesData } from "@/app/actions/documents";
 import {
@@ -21,17 +24,24 @@ interface DashboardClientProps {
   initialStats: any;
   initialAddedData: TimeSeriesData[];
   initialReadData: TimeSeriesData[];
+  initialDailyAddedData: TimeSeriesData[];
+  initialDailyReadData: TimeSeriesData[];
 }
 
 export default function DashboardClient({
   initialStats,
   initialAddedData,
   initialReadData,
+  initialDailyAddedData,
+  initialDailyReadData,
 }: DashboardClientProps) {
   const [stats] = useState(initialStats);
   const [addedData, setAddedData] = useState(initialAddedData);
   const [readData, setReadData] = useState(initialReadData);
+  const [dailyAddedData, setDailyAddedData] = useState(initialDailyAddedData);
+  const [dailyReadData, setDailyReadData] = useState(initialDailyReadData);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDailyLoading, setIsDailyLoading] = useState(false);
 
   // Calculate some derived stats
   const readLaterCount = stats.byLocation["later"] || 0;
@@ -50,6 +60,22 @@ export default function DashboardClient({
       console.error("Failed to load new time range data:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDailyTimeRangeChange = async (days: number) => {
+    setIsDailyLoading(true);
+    try {
+      const [newDailyAddedData, newDailyReadData] = await Promise.all([
+        getDocumentsAddedOverTime(days),
+        getDocumentsReadOverTime(days),
+      ]);
+      setDailyAddedData(newDailyAddedData);
+      setDailyReadData(newDailyReadData);
+    } catch (error) {
+      console.error("Failed to load new daily time range data:", error);
+    } finally {
+      setIsDailyLoading(false);
     }
   };
 
@@ -84,7 +110,19 @@ export default function DashboardClient({
           />
         </div>
 
-        {/* Activity Chart */}
+        {/* Daily Activity Chart */}
+        <div className="grid gap-4 lg:grid-cols-1">
+          <div className={isDailyLoading ? "opacity-50 pointer-events-none" : ""}>
+            <DailyActivityChart
+              addedData={dailyAddedData}
+              readData={dailyReadData}
+              onTimeRangeChange={handleDailyTimeRangeChange}
+              initialDays={14}
+            />
+          </div>
+        </div>
+
+        {/* Weekly Activity Chart */}
         <div className="grid gap-4 lg:grid-cols-1">
           <div className={isLoading ? "opacity-50 pointer-events-none" : ""}>
             <ActivityChart
